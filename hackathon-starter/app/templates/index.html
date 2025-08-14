@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{ app_title }}</title>
+	<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+	<header>
+		<h1>🏆 {{ app_title }}</h1>
+		<p>Brainstorm ideas, craft your pitch, and plan execution fast.</p>
+	</header>
+	<main>
+		<section class="card">
+			<h2>1) Brainstorm</h2>
+			<label>Domain/Theme</label>
+			<input id="domain" placeholder="e.g., health, fintech, climate, devtools">
+			<label>Constraints (optional)</label>
+			<input id="constraints" placeholder="e.g., on-device, no external APIs">
+			<div class="row">
+				<div>
+					<label>Team size</label>
+					<input id="team_size" type="number" min="1" placeholder="3">
+				</div>
+				<div>
+					<label>Time limit (hours)</label>
+					<input id="time_limit" type="number" min="1" placeholder="24">
+				</div>
+			</div>
+			<button id="btnBrainstorm">Generate ideas</button>
+			<ul id="ideas"></ul>
+		</section>
+
+		<section class="card">
+			<h2>2) Pitch</h2>
+			<label>Selected idea</label>
+			<textarea id="idea_text" rows="4" placeholder="Paste your chosen idea here"></textarea>
+			<label>Judging criteria (optional)</label>
+			<input id="criteria" placeholder="innovation, feasibility, impact, demo">
+			<button id="btnPitch">Write pitch</button>
+			<pre id="pitch"></pre>
+		</section>
+
+		<section class="card">
+			<h2>3) Plan</h2>
+			<label>Idea</label>
+			<textarea id="plan_idea" rows="3" placeholder="Paste idea to plan"></textarea>
+			<div class="row">
+				<div>
+					<label>Team size</label>
+					<input id="plan_team" type="number" min="1" value="3">
+				</div>
+				<div>
+					<label>Hours</label>
+					<input id="plan_hours" type="number" min="1" value="24">
+				</div>
+			</div>
+			<button id="btnPlan">Generate plan</button>
+			<h3>Milestones</h3>
+			<ul id="milestones"></ul>
+			<h3>Tasks</h3>
+			<ul id="tasks"></ul>
+		</section>
+	</main>
+	<footer>
+		<a href="/health" target="_blank">health</a>
+	</footer>
+	<script>
+	async function postJSON(url, data) {
+		const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+		if (!res.ok) throw new Error(await res.text());
+		return res.json();
+	}
+
+	document.getElementById('btnBrainstorm').addEventListener('click', async () => {
+		const domain = document.getElementById('domain').value.trim();
+		const constraints = document.getElementById('constraints').value.trim();
+		const team_size = parseInt(document.getElementById('team_size').value || '0', 10) || null;
+		const time_limit_hours = parseInt(document.getElementById('time_limit').value || '0', 10) || null;
+		const ideasEl = document.getElementById('ideas');
+		ideasEl.innerHTML = '<li>Loading...</li>';
+		try {
+			const data = await postJSON('/api/brainstorm', { domain, constraints, team_size, time_limit_hours });
+			ideasEl.innerHTML = '';
+			(data.ideas || []).forEach((idea) => {
+				const li = document.createElement('li');
+				li.textContent = idea;
+				li.addEventListener('click', () => {
+					document.getElementById('idea_text').value = idea;
+					document.getElementById('plan_idea').value = idea;
+				});
+				ideasEl.appendChild(li);
+			});
+		} catch (e) {
+			ideasEl.innerHTML = `<li class="error">${e}</li>`;
+		}
+	});
+
+	document.getElementById('btnPitch').addEventListener('click', async () => {
+		const idea = document.getElementById('idea_text').value.trim();
+		const judging_criteria = document.getElementById('criteria').value.trim();
+		const pitchEl = document.getElementById('pitch');
+		pitchEl.textContent = 'Loading...';
+		try {
+			const data = await postJSON('/api/pitch', { idea, judging_criteria });
+			pitchEl.textContent = data.pitch || '';
+		} catch (e) {
+			pitchEl.textContent = String(e);
+		}
+	});
+
+	document.getElementById('btnPlan').addEventListener('click', async () => {
+		const idea = document.getElementById('plan_idea').value.trim();
+		const team_size = parseInt(document.getElementById('plan_team').value || '3', 10);
+		const time_limit_hours = parseInt(document.getElementById('plan_hours').value || '24', 10);
+		const milestonesEl = document.getElementById('milestones');
+		const tasksEl = document.getElementById('tasks');
+		milestonesEl.innerHTML = '<li>Loading...</li>';
+		tasksEl.innerHTML = '';
+		try {
+			const data = await postJSON('/api/plan', { idea, team_size, time_limit_hours });
+			milestonesEl.innerHTML = '';
+			(data.milestones || []).forEach((m) => {
+				const li = document.createElement('li');
+				li.textContent = m;
+				milestonesEl.appendChild(li);
+			});
+			tasksEl.innerHTML = '';
+			(data.tasks || []).forEach((t) => {
+				const li = document.createElement('li');
+				li.textContent = t;
+				tasksEl.appendChild(li);
+			});
+		} catch (e) {
+			milestonesEl.innerHTML = '';
+			tasksEl.innerHTML = `<li class="error">${e}</li>`;
+		}
+	});
+	</script>
+</body>
+</html>
