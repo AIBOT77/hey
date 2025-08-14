@@ -47,48 +47,59 @@ def generate_pitch_outline(
 	tone: str,
 	num_slides: int = 8,
 ) -> List[SlideSpec]:
-	"""Use OpenAI to generate a JSON outline for a pitch deck."""
-	client = _openai_client()
-	system = (
-		"You are an expert startup storyteller. Produce a tight, high-signal pitch deck outline as JSON. "
-		"Focus on clarity, persuasion, and concrete traction or plan."
-	)
-	user = (
-		f"Problem: {problem_statement}\n"
-		f"Audience: {audience}\n"
-		f"Tone: {tone}\n"
-		f"Slides: {num_slides}\n"
-		"Return JSON with 'slides': [ { 'title': str, 'bullets': [str...], 'notes': str? } ]."
-	)
-	resp = client.chat.completions.create(
-		model="gpt-4o-mini",
-		messages=[
-			{"role": "system", "content": system},
-			{"role": "user", "content": user},
-		],
-		temperature=0.5,
-		response_format={"type": "json_object"},
-	)
-	content = resp.choices[0].message.content or "{}"
+	"""Use OpenAI to generate a JSON outline for a pitch deck. Falls back to offline demo if no key or on error."""
+	def _demo_slides() -> List[SlideSpec]:
+		return [
+			SlideSpec(title="Problem", bullets=[problem_statement[:160] or "Users waste time on X."]),
+			SlideSpec(title="Solution", bullets=["AI-powered automation", "10x faster", "Seamless UX"]),
+			SlideSpec(title="Product", bullets=["Demo-ready", "Key features", "Roadmap"]),
+			SlideSpec(title="Market", bullets=["Beachhead segment", "TAM/SAM/SOM", "Why now"]),
+			SlideSpec(title="Business Model", bullets=["SaaS tiers", "Enterprise upsell", "Partnerships"]),
+			SlideSpec(title="Go-To-Market", bullets=["ICP", "Channels", "Messaging"]),
+			SlideSpec(title="Traction", bullets=["Alpha users", "Core KPI", "Early pilots"]),
+			SlideSpec(title="Team & Ask", bullets=["Who we are", "Why us", "What we need next"]),
+		][:num_slides]
+	# Demo mode or missing key: return local slides
+	if os.getenv("DEMO_MODE") == "1" or not os.getenv("OPENAI_API_KEY"):
+		return _demo_slides()
 	try:
-		parsed: Dict = json.loads(content)
-	except json.JSONDecodeError:
-		parsed = {"slides": []}
-	slides: List[SlideSpec] = []
-	for s in parsed.get("slides", [])[:num_slides]:
-		title = str(s.get("title", "Slide"))
-		bullets = [str(b) for b in s.get("bullets", [])]
-		notes = s.get("notes")
-		slides.append(SlideSpec(title=title, bullets=bullets, notes=notes))
-	if not slides:
-		# Fallback minimal deck
-		slides = [
-			SlideSpec(title="Problem", bullets=[problem_statement[:120]]),
-			SlideSpec(title="Solution", bullets=["AI-powered app", "Clear value prop"]),
-			SlideSpec(title="Market", bullets=["Target users", "Size", "Why now"]),
-			SlideSpec(title="Traction", bullets=["Prototype", "Early users", "KPIs"]),
-		]
-	return slides
+		client = _openai_client()
+		system = (
+			"You are an expert startup storyteller. Produce a tight, high-signal pitch deck outline as JSON. "
+			"Focus on clarity, persuasion, and concrete traction or plan."
+		)
+		user = (
+			f"Problem: {problem_statement}\n"
+			f"Audience: {audience}\n"
+			f"Tone: {tone}\n"
+			f"Slides: {num_slides}\n"
+			"Return JSON with 'slides': [ { 'title': str, 'bullets': [str...], 'notes': str? } ]."
+		)
+		resp = client.chat.completions.create(
+			model="gpt-4o-mini",
+			messages=[
+				{"role": "system", "content": system},
+				{"role": "user", "content": user},
+			],
+			temperature=0.5,
+			response_format={"type": "json_object"},
+		)
+		content = resp.choices[0].message.content or "{}"
+		try:
+			parsed: Dict = json.loads(content)
+		except json.JSONDecodeError:
+			parsed = {"slides": []}
+		slides: List[SlideSpec] = []
+		for s in parsed.get("slides", [])[:num_slides]:
+			title = str(s.get("title", "Slide"))
+			bullets = [str(b) for b in s.get("bullets", [])]
+			notes = s.get("notes")
+			slides.append(SlideSpec(title=title, bullets=bullets, notes=notes))
+		if not slides:
+			slides = _demo_slides()
+		return slides
+	except Exception:
+		return _demo_slides()
 
 
 def create_charts_from_dataframe(df: pd.DataFrame, max_charts: int = 2) -> List[io.BytesIO]:
